@@ -1,8 +1,15 @@
-const { chromium } = require('/root/Kick_Ai/node_modules/playwright');
+const { chromium } = require('playwright');
 const fs = require('fs');
 const { execSync } = require('child_process');
-const LOG = '/tmp/intd.log';
-const CONFIG_PATH = '/root/Kick_Ai/scripts/intd-config.json';
+const path = require('path');
+
+const LOG = process.env.INTD_LOG || '/tmp/intd.log';
+const DEBUG_LOG = process.env.DEBUG_LOG || '/tmp/debug.log';
+const CONFIG_PATH = process.env.CONFIG_PATH || path.join(__dirname, 'intd-config.json');
+const CLAUDE_WORKDIR = process.env.CLAUDE_WORKDIR || '/tmp/testproj';
+const PROXY_URL = process.env.ANTHROPIC_BASE_URL || 'http://127.0.0.1:5555';
+const BROWSER_URL = process.env.BROWSER_URL || 'http://127.0.0.1:18800';
+const IDE_URL = process.env.IDE_URL || 'http://127.0.0.1:8080';
 let config = {};
 try {
   config = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
@@ -72,10 +79,10 @@ function pickQ(lastIdx) {
 
 async function main() {
   log('=== INTD V2 ===');
-  const b = await chromium.connectOverCDP('http://127.0.0.1:18800');
+  const b = await chromium.connectOverCDP(BROWSER_URL);
   let p = null;
   for (const c of b.contexts()) { for (const pg of c.pages()) { if (pg.url().includes('8080')) { p = pg; break; } } if (p) break; }
-  if (!p) { const c = b.contexts()[0] || await b.newContext(); p = await c.newPage(); await p.goto('http://127.0.0.1:8080/?folder=/tmp/testproj', { timeout: 15000 }); }
+  if (!p) { const c = b.contexts()[0] || await b.newContext(); p = await c.newPage(); await p.goto(`${IDE_URL}/?folder=${CLAUDE_WORKDIR}`, { timeout: 15000 }); }
 
   let hasTerm = await p.evaluate(() => !!document.querySelector('.xterm-helper-textarea'));
   if (!hasTerm) { await p.keyboard.press('Control+`'); await new Promise(r => setTimeout(r, 5000)); }
@@ -84,7 +91,7 @@ async function main() {
 
   const claudeRunning = execSync("ps aux | grep -E '[c]laude ' | wc -l").toString().trim();
   if (parseInt(claudeRunning) < 2) {
-    await p.keyboard.type('cd /tmp/testproj && ANTHROPIC_BASE_URL=http://127.0.0.1:5555 claude', { delay: 15 });
+    await p.keyboard.type(`cd ${CLAUDE_WORKDIR} && ANTHROPIC_BASE_URL=${PROXY_URL} claude`, { delay: 15 });
     await p.keyboard.press('Enter');
     await new Promise(r => setTimeout(r, 15000));
     for (let i = 0; i < 12; i++) { await p.keyboard.press('Enter'); await new Promise(r => setTimeout(r, 600)); }
@@ -106,8 +113,10 @@ async function main() {
     log(`  ~${Math.round(thinkSec/60)}min spin`);
     await new Promise(r => setTimeout(r, thinkSec * 1000));
 
-    const lines = fs.readFileSync('/root/.vibe-ads/debug.log','utf8').split('\n').filter(l => l.includes('signedIn') || l.includes('auth.'));
-    log(`  ${lines.slice(-1)[0]?.slice(38,80) || '?'}`);
+    if (fs.existsSync(DEBUG_LOG)) {
+      const lines = fs.readFileSync(DEBUG_LOG,'utf8').split('\n').filter(l => l.includes('signedIn') || l.includes('auth.'));
+      log(`  ${lines.slice(-1)[0]?.slice(38,80) || '?'}`);
+    }
 
     // Coffee‑break pause (shorter, to keep work flowing)
     const brakeRange = config.brakeSec[depth] || [10, 30];

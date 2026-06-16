@@ -7,7 +7,7 @@
 # ---------------------------------------------------------------
 
 NUM=${1:-5}
-SCRIPT_DIR="/root/Kick_Ai/scripts"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 INTD="intd-v2.js"
 
 if [[ ! -f "$SCRIPT_DIR/$INTD" ]]; then
